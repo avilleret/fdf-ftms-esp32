@@ -1,0 +1,122 @@
+# ESP-IDF Build System
+build/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+
+# ESP-IDF Configuration
+managed_components/
+dependencies/
+components/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# ESP-IDF specific
+.pio/
+.pioenvs/
+.piolibdeps/
+.clang_complete
+.gcc-flags.json
+.ccls
+compile_commands.json
+
+# Partition tables
+partitions.csv
+
+# Flash and monitor logs
+flash_log.txt
+monitor_log.txt
+
+# NVS (Non-Volatile Storage) files
+nvs.bin
+nvs_partition.bin
+
+# OTA (Over-The-Air) update files
+ota_data_initial.bin
+
+# Bootloader files
+bootloader.bin
+
+# Application binary
+*.bin
+*.elf
+
+# Map files
+*.map
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Coverage reports
+*.gcov
+*.gcno
+*.gcda
+coverage/
+
+# Test results
+test_results/
+test_logs/
+
+# Documentation build
+docs/_build/
+docs/build/
+
+# Backup files
+*.orig
+*.rej
+
+# ESP-IDF tools
+tools/
+xtensa-esp32-elf/
+xtensa-esp32s2-elf/
+xtensa-esp32s3-elf/
+riscv32-esp-elf/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# ESP-IDF specific generated files
+esp-idf/
+esp-idf-*
