@@ -55,11 +55,11 @@ void app_main(void)
     }
 
     // Initialize USB host
-    if (!usb_host_init()) {
-        ESP_LOGE(TAG, "Failed to initialize USB host");
+    esp_err_t usb_ret = usb_host_init(usb_data_received);
+    if (usb_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize USB host: %s", esp_err_to_name(usb_ret));
         return;
     }
-    usb_host_register_data_callback(usb_data_received);
 
     ESP_LOGI(TAG, "FDF Bluetooth Bridge initialized successfully");
     ESP_LOGI(TAG, "Connect your FDF console via USB and pair with 'FDF Rower' device");
