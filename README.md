@@ -56,23 +56,11 @@ All FTMS Indoor Rower Data fields are transmitted:
 
 2. Clone this repository:
    ```bash
-   git clone <repository-url>
-   cd fdf-esp32
+   git clone https://github.com/avilleret/fdf-ftms-esp32
+   cd fdf-ftms-esp32
    ```
 
 ### Building and Flashing
-
-1. Set up ESP-IDF environment:
-   ```bash
-   export IDF_PATH=~/dev/esp-idf  # Adjust path to your ESP-IDF installation
-   source ~/dev/esp-idf/export.sh
-   ```
-
-2. Configure the project:
-   ```bash
-   idf.py set-target esp32s3
-   idf.py menuconfig
-   ```
 
 3. Build the project:
    ```bash
