@@ -25,8 +25,27 @@ static bool bt_initialized = false;
 static fdf_rowing_data_t current_rowing_data = {0};
 static SemaphoreHandle_t data_mutex = NULL;
 
+// Forward declarations
+static void gatts_event_handler(esp_gatts_cb_event_t event,
+                                esp_gatt_if_t gatts_if,
+                                esp_ble_gatts_cb_param_t *param);
+
 // GATT interface
 static esp_gatt_if_t gatts_if = ESP_GATT_IF_NONE;
+
+// Application profile structure
+struct gatts_profile_inst {
+    esp_gatts_cb_t gatts_cb;
+    esp_gatt_if_t gatts_if;
+    uint16_t service_handle;
+    esp_bt_uuid_t service_uuid;
+};
+
+// Profile instance for FTMS service
+static struct gatts_profile_inst profile_tab = {
+    .gatts_cb = gatts_event_handler,
+    .gatts_if = ESP_GATT_IF_NONE,
+};
 
 /**
  * @brief GAP event handler
@@ -66,6 +85,7 @@ static void gatts_event_handler(esp_gatts_cb_event_t event,
     switch (event) {
         case ESP_GATTS_REG_EVT:
             if (param->reg.status == ESP_GATT_OK) {
+                profile_tab.gatts_if = gatts_if;
                 gatts_if = gatts_if;
                 ESP_LOGI(TAG, "GATTS registered successfully, interface: %d", gatts_if);
             } else {
@@ -182,14 +202,27 @@ bool ble_ftms_init(void)
     }
     ESP_LOGI(TAG, "GATTS callback registered successfully");
     
+    // Register application profile
+    ESP_LOGI(TAG, "Registering application profile...");
+    ret = esp_ble_gatts_app_register(0);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register application profile: %s", esp_err_to_name(ret));
+        esp_bluedroid_disable();
+        esp_bluedroid_deinit();
+        esp_bt_controller_disable();
+        esp_bt_controller_deinit();
+        vSemaphoreDelete(data_mutex);
+        return false;
+    }
+    ESP_LOGI(TAG, "Application profile registered successfully");
+    
     // TODO: Next steps to complete FTMS:
-    // 1. Create application profile and register with esp_ble_gatts_app_register()
-    // 2. Create FTMS service (UUID 0x1826) with Indoor Rower Data characteristic (UUID 0x2AD1)
-    // 3. Start advertising with esp_ble_gap_start_advertising()
+    // 1. Create FTMS service (UUID 0x1826) with Indoor Rower Data characteristic (UUID 0x2AD1)
+    // 2. Start advertising with esp_ble_gap_start_advertising()
     
     bt_initialized = true;
     ESP_LOGI(TAG, "Bluetooth stack initialized successfully");
-    ESP_LOGW(TAG, "TODO: Implement GATT service creation and advertising");
+    ESP_LOGW(TAG, "TODO: Create GATT service and start advertising");
     
     return true;
 }
