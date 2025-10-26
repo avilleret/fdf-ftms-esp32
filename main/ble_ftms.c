@@ -39,6 +39,8 @@ static void gatts_event_handler(esp_gatts_cb_event_t event,
 static esp_gatt_if_t gatts_if = ESP_GATT_IF_NONE;
 static uint16_t service_handle = 0;
 static uint16_t char_handle = 0;
+static uint16_t conn_id = ESP_GATT_ILLEGAL_UUID;
+static bool notifications_enabled = false;
 
 // Application profile structure
 struct gatts_profile_inst {
@@ -179,12 +181,32 @@ static void gatts_event_handler(esp_gatts_cb_event_t event,
         
         case ESP_GATTS_CONNECT_EVT:
             is_connected = true;
-            ESP_LOGI(TAG, "Client connected, conn_id: %d", param->connect.conn_id);
+            conn_id = param->connect.conn_id;
+            notifications_enabled = false;
+            ESP_LOGI(TAG, "Client connected, conn_id: %d", conn_id);
             break;
         
         case ESP_GATTS_DISCONNECT_EVT:
             is_connected = false;
+            conn_id = ESP_GATT_ILLEGAL_UUID;
+            notifications_enabled = false;
             ESP_LOGI(TAG, "Client disconnected");
+            break;
+        
+        case ESP_GATTS_WRITE_EVT:
+            // Handle CCCD (Client Characteristic Configuration Descriptor) writes
+            if (param->write.need_rsp) {
+                esp_gatt_rsp_t rsp = {0};
+                rsp.attr_value.len = 0;
+                rsp.attr_value.handle = param->write.handle;
+                esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, &rsp);
+            }
+            // Check if this is a CCCD write (notifications enable/disable)
+            if (param->write.handle == char_handle + 1 && param->write.len == 2) {
+                uint16_t cccd_value = param->write.value[0] | (param->write.value[1] << 8);
+                notifications_enabled = (cccd_value & 0x01); // Check bit 0 for notifications
+                ESP_LOGI(TAG, "Notifications %s", notifications_enabled ? "enabled" : "disabled");
+            }
             break;
         
         default:
@@ -309,6 +331,85 @@ bool ble_ftms_init(void)
 }
 
 /**
+ * @brief Format Indoor Rower Data packet according to FTMS specification
+ */
+static void format_indoor_rower_data(const fdf_rowing_data_t *data, uint8_t *packet, size_t *packet_len)
+{
+    size_t idx = 0;
+    
+    // Flags (2 bytes) - indicate which fields are present
+    uint16_t flags = 0;
+    flags |= FTMS_FLAG_TOTAL_DISTANCE_PRESENT;
+    flags |= FTMS_FLAG_INSTANTANEOUS_PACE_PRESENT;
+    flags |= FTMS_FLAG_AVERAGE_PACE_PRESENT;
+    flags |= FTMS_FLAG_EXPANDED_ENERGY_PRESENT;
+    flags |= FTMS_FLAG_ELAPSED_TIME_PRESENT;
+    flags |= FTMS_FLAG_POWER_OUTPUT_PRESENT;
+    flags |= FTMS_FLAG_STEP_RATE_PRESENT;
+    
+    packet[idx++] = flags & 0xFF;
+    packet[idx++] = (flags >> 8) & 0xFF;
+    
+    // Stroke Rate (2 bytes) - strokes per minute
+    uint16_t stroke_rate = data->stroke_rate;
+    packet[idx++] = stroke_rate & 0xFF;
+    packet[idx++] = (stroke_rate >> 8) & 0xFF;
+    
+    // Stroke Count (2 bytes)
+    uint16_t stroke_count = data->stroke_count;
+    packet[idx++] = stroke_count & 0xFF;
+    packet[idx++] = (stroke_count >> 8) & 0xFF;
+    
+    // Average Stroke Rate (2 bytes)
+    uint16_t avg_stroke_rate = data->avg_stroke_rate;
+    packet[idx++] = avg_stroke_rate & 0xFF;
+    packet[idx++] = (avg_stroke_rate >> 8) & 0xFF;
+    
+    // Total Distance (3 bytes) - in meters
+    uint32_t distance = data->distance_m;
+    packet[idx++] = distance & 0xFF;
+    packet[idx++] = (distance >> 8) & 0xFF;
+    packet[idx++] = (distance >> 16) & 0xFF;
+    
+    // Instantaneous Pace (2 bytes) - 1/100th seconds per 500m
+    uint16_t pace = data->pace_500m_ms / 10; // convert ms to 1/100th seconds
+    packet[idx++] = pace & 0xFF;
+    packet[idx++] = (pace >> 8) & 0xFF;
+    
+    // Average Pace (2 bytes)
+    uint16_t avg_pace = data->avg_pace_500m_ms / 10;
+    packet[idx++] = avg_pace & 0xFF;
+    packet[idx++] = (avg_pace >> 8) & 0xFF;
+    
+    // Instantaneous Power (2 bytes) - watts
+    uint16_t power = data->power_watts;
+    packet[idx++] = power & 0xFF;
+    packet[idx++] = (power >> 8) & 0xFF;
+    
+    // Average Power (2 bytes)
+    uint16_t avg_power = data->avg_power_watts;
+    packet[idx++] = avg_power & 0xFF;
+    packet[idx++] = (avg_power >> 8) & 0xFF;
+    
+    // Total Energy (2 bytes) - calories
+    uint16_t calories = data->calories;
+    packet[idx++] = calories & 0xFF;
+    packet[idx++] = (calories >> 8) & 0xFF;
+    
+    // Energy Per Hour (2 bytes) - calories per hour
+    uint16_t energy_per_hr = calories; // Simplified - use total calories
+    packet[idx++] = energy_per_hr & 0xFF;
+    packet[idx++] = (energy_per_hr >> 8) & 0xFF;
+    
+    // Elapsed Time (2 bytes) - seconds
+    uint16_t elapsed_time = data->elapsed_time_ms / 1000;
+    packet[idx++] = elapsed_time & 0xFF;
+    packet[idx++] = (elapsed_time >> 8) & 0xFF;
+    
+    *packet_len = idx;
+}
+
+/**
  * @brief Update FTMS data with new rowing metrics
  */
 void ble_ftms_update_data(const fdf_rowing_data_t *data)
@@ -325,10 +426,18 @@ void ble_ftms_update_data(const fdf_rowing_data_t *data)
         ESP_LOGI(TAG, "FTMS data updated - Strokes: %" PRIu16 ", Distance: %" PRIu32 " m, Rate: %" PRIu16 " spm, Power: %" PRIu16 " W", 
                  data->stroke_count, data->distance_m, data->stroke_rate, data->power_watts);
         
-        // TODO: Send GATT notification to connected clients with Indoor Rower Data packet
-        // Format: Flags(2) + StrokeRate(2) + StrokeCount(2) + AvgStrokeRate(2) + 
-        //         Distance(3) + Pace(2) + AvgPace(2) + Power(2) + AvgPower(2) + 
-        //         Calories(2) + EnergyPerHr(2) + ElapsedTime(2)
+        // Send GATT notification if client is connected and subscribed
+        if (is_connected && notifications_enabled && conn_id != ESP_GATT_ILLEGAL_UUID) {
+            uint8_t packet[20]; // FTMS Indoor Rower Data packet is max 20 bytes
+            size_t packet_len;
+            
+            format_indoor_rower_data(data, packet, &packet_len);
+            
+            esp_err_t ret = esp_ble_gatts_send_indicate(gatts_if, conn_id, char_handle, packet_len, packet, false);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to send notification: %s", esp_err_to_name(ret));
+            }
+        }
     }
 }
 
