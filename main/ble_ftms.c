@@ -10,6 +10,7 @@
 #include "esp_bt_main.h"
 #include "esp_bt_defs.h"
 #include "esp_gap_ble_api.h"
+#include "esp_gatt_defs.h"
 #include "esp_gatts_api.h"
 #include "esp_gatt_common_api.h"
 
@@ -149,6 +150,28 @@ static void gatts_event_handler(esp_gatts_cb_event_t event,
                 // Start the service
                 esp_ble_gatts_start_service(service_handle);
                 ESP_LOGI(TAG, "FTMS service started");
+                
+                // Start advertising
+                esp_ble_adv_data_t adv_data = {0};
+                adv_data.set_scan_rsp = false;
+                adv_data.include_name = true;
+                adv_data.include_txpower = true;
+                adv_data.service_uuid_len = 2;
+                uint8_t service_uuid[2] = {0x26, 0x18}; // FTMS UUID in little-endian
+                adv_data.p_service_uuid = service_uuid;
+                
+                esp_ble_gap_set_device_name("FDF Rower");
+                esp_ble_gap_config_adv_data(&adv_data);
+                
+                esp_ble_adv_params_t adv_params = {
+                    .adv_int_min = 0x20,
+                    .adv_int_max = 0x40,
+                    .adv_type = ADV_TYPE_IND,
+                    .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
+                    .channel_map = ADV_CHNL_ALL,
+                    .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
+                };
+                esp_ble_gap_start_advertising(&adv_params);
             } else {
                 ESP_LOGE(TAG, "Characteristic addition failed");
             }
@@ -277,12 +300,10 @@ bool ble_ftms_init(void)
     }
     ESP_LOGI(TAG, "Application profile registered successfully");
     
-    // Service creation will happen in GATTS_REG_EVT callback
-    // TODO: Start advertising with esp_ble_gap_start_advertising()
+    // Service creation and advertising will happen in GATTS event callbacks
     
     bt_initialized = true;
     ESP_LOGI(TAG, "Bluetooth stack initialized successfully");
-    ESP_LOGW(TAG, "TODO: Start advertising");
     
     return true;
 }
@@ -324,19 +345,39 @@ bool ble_ftms_is_connected(void)
  */
 void ble_ftms_start_advertising(void)
 {
-    ESP_LOGI(TAG, "Starting advertising (TODO: implement esp_ble_gap_start_advertising)");
-    
     if (!bt_initialized) {
         ESP_LOGW(TAG, "Bluetooth not initialized, cannot advertise");
         return;
     }
     
-    // TODO: Implement advertising
-    // esp_ble_adv_data_t adv_data = {0};
-    // Set advertisement data with FTMS UUID (0x1826)
-    // esp_ble_gap_set_device_name("FDF Rower");
-    // esp_ble_gap_config_adv_data(&adv_data);
-    // esp_ble_gap_start_advertising(&adv_params);
+    ESP_LOGI(TAG, "Starting advertising...");
+    
+    esp_ble_adv_data_t adv_data = {0};
+    adv_data.set_scan_rsp = false;
+    adv_data.include_name = true;
+    adv_data.include_txpower = true;
+    adv_data.service_uuid_len = 2;
+    uint8_t service_uuid[2] = {0x26, 0x18}; // FTMS UUID in little-endian
+    adv_data.p_service_uuid = service_uuid;
+    
+    esp_ble_gap_set_device_name("FDF Rower");
+    esp_ble_gap_config_adv_data(&adv_data);
+    
+    esp_ble_adv_params_t adv_params = {
+        .adv_int_min = 0x20,
+        .adv_int_max = 0x40,
+        .adv_type = ADV_TYPE_IND,
+        .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
+        .channel_map = ADV_CHNL_ALL,
+        .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
+    };
+    
+    esp_err_t ret = esp_ble_gap_start_advertising(&adv_params);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start advertising: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "Advertising started");
+    }
 }
 
 /**
@@ -344,10 +385,17 @@ void ble_ftms_start_advertising(void)
  */
 void ble_ftms_stop_advertising(void)
 {
-    ESP_LOGI(TAG, "Stopping advertising (TODO: implement esp_ble_gap_stop_advertising)");
+    if (!bt_initialized) {
+        return;
+    }
     
-    // TODO: Implement stop advertising
-    // esp_ble_gap_stop_advertising();
+    ESP_LOGI(TAG, "Stopping advertising...");
+    esp_err_t ret = esp_ble_gap_stop_advertising();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to stop advertising: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "Advertising stopped");
+    }
 }
 
 /**
