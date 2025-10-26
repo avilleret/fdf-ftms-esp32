@@ -3,4 +3,4 @@ idf_component_register(SRCS "main.c"
                              "fdf_protocol.c"
                              "ble_ftms.c"
                        INCLUDE_DIRS "."
-                       REQUIRES usb_host_cdc_acm nvs_flash esp_timer)
+                       REQUIRES usb_host_cdc_acm nvs_flash esp_timer bt)
