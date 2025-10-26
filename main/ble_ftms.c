@@ -30,8 +30,14 @@ static void gatts_event_handler(esp_gatts_cb_event_t event,
                                 esp_gatt_if_t gatts_if,
                                 esp_ble_gatts_cb_param_t *param);
 
+// FTMS Service UUIDs
+#define FTMS_SERVICE_UUID    0x1826
+#define INDOOR_ROWER_DATA_UUID 0x2AD1
+
 // GATT interface
 static esp_gatt_if_t gatts_if = ESP_GATT_IF_NONE;
+static uint16_t service_handle = 0;
+static uint16_t char_handle = 0;
 
 // Application profile structure
 struct gatts_profile_inst {
@@ -88,8 +94,63 @@ static void gatts_event_handler(esp_gatts_cb_event_t event,
                 profile_tab.gatts_if = gatts_if;
                 gatts_if = gatts_if;
                 ESP_LOGI(TAG, "GATTS registered successfully, interface: %d", gatts_if);
+                
+                // Create FTMS service
+                esp_gatt_srvc_id_t service_id = {
+                    .is_primary = true,
+                    .id = {
+                        .uuid = {
+                            .len = ESP_UUID_LEN_16,
+                            .uuid = {.uuid16 = FTMS_SERVICE_UUID}
+                        },
+                        .inst_id = 0
+                    }
+                };
+                
+                esp_ble_gatts_create_service(gatts_if, &service_id, 5);
             } else {
                 ESP_LOGE(TAG, "GATTS registration failed");
+            }
+            break;
+        
+        case ESP_GATTS_CREATE_EVT:
+            if (param->create.status == ESP_GATT_OK) {
+                service_handle = param->create.service_handle;
+                ESP_LOGI(TAG, "FTMS service created, handle: %d", service_handle);
+                
+                // Create Indoor Rower Data characteristic
+                esp_bt_uuid_t char_uuid = {
+                    .len = ESP_UUID_LEN_16,
+                    .uuid = {.uuid16 = INDOOR_ROWER_DATA_UUID}
+                };
+                
+                esp_attr_value_t char_val = {
+                    .attr_max_len = 20,
+                    .attr_len = 0,
+                    .attr_value = NULL
+                };
+                
+                esp_attr_control_t control = {0};
+                
+                esp_ble_gatts_add_char(service_handle, &char_uuid,
+                                     ESP_GATT_PERM_READ,
+                                     ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY,
+                                     &char_val, &control);
+            } else {
+                ESP_LOGE(TAG, "Service creation failed");
+            }
+            break;
+        
+        case ESP_GATTS_ADD_CHAR_EVT:
+            if (param->add_char.status == ESP_GATT_OK) {
+                char_handle = param->add_char.attr_handle;
+                ESP_LOGI(TAG, "Indoor Rower Data characteristic added, handle: %d", char_handle);
+                
+                // Start the service
+                esp_ble_gatts_start_service(service_handle);
+                ESP_LOGI(TAG, "FTMS service started");
+            } else {
+                ESP_LOGE(TAG, "Characteristic addition failed");
             }
             break;
         
@@ -216,13 +277,12 @@ bool ble_ftms_init(void)
     }
     ESP_LOGI(TAG, "Application profile registered successfully");
     
-    // TODO: Next steps to complete FTMS:
-    // 1. Create FTMS service (UUID 0x1826) with Indoor Rower Data characteristic (UUID 0x2AD1)
-    // 2. Start advertising with esp_ble_gap_start_advertising()
+    // Service creation will happen in GATTS_REG_EVT callback
+    // TODO: Start advertising with esp_ble_gap_start_advertising()
     
     bt_initialized = true;
     ESP_LOGI(TAG, "Bluetooth stack initialized successfully");
-    ESP_LOGW(TAG, "TODO: Create GATT service and start advertising");
+    ESP_LOGW(TAG, "TODO: Start advertising");
     
     return true;
 }
