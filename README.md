@@ -21,12 +21,23 @@ This project creates an ESP32-S3 firmware that acts as a USB-to-Bluetooth bridge
 
 ## Supported Data Metrics
 
+All FTMS Indoor Rower Data fields are transmitted:
+
+**Timing & Stroke Data:**
 - Stroke count and rate (current and average)
-- Distance (meters)
-- Elapsed time
-- Power output (watts, current and average)
-- Calories burned
-- Pace per 500m (current and average)
+- Elapsed time (seconds)
+- Average stroke rate
+
+**Distance & Pace:**
+- Total distance (meters)
+- Instantaneous pace per 500m
+- Average pace per 500m
+
+**Power & Energy:**
+- Instantaneous power (watts)
+- Average power (watts)
+- Total energy (calories)
+- Energy per hour (calories)
 
 ## Build Instructions
 
@@ -77,31 +88,40 @@ This project creates an ESP32-S3 firmware that acts as a USB-to-Bluetooth bridge
 
 ✅ **Project builds successfully** with ESP-IDF v5.0  
 ✅ **USB Host functionality** fully implemented with CDC-ACM support  
-✅ **FDF protocol parser** ready for data processing  
-⚠️ **Bluetooth FTMS** - stub implementation with framework for full implementation  
+✅ **FDF protocol parser** complete with rowing metrics extraction  
+✅ **Bluetooth FTMS** fully implemented with Indoor Rower Data notifications  
 
 ### What's Working
 
-- ✅ USB Host CDC-ACM driver initialization and device detection
-- ✅ Automatic CDC-ACM device connection and data reception
-- ✅ Data callback system for forwarding received data
-- ✅ FDF protocol parsing structure (ready for implementation)
-- ✅ FTMS data update framework (ready for GATT notifications)
-- ✅ Complete project structure with all required files
+- ✅ USB Host CDC-ACM driver initialization and automatic device detection
+- ✅ Real-time data reception from FDF console via USB serial
+- ✅ FDF protocol parser extracting all rowing metrics (strokes, distance, rate, power, calories, pace)
+- ✅ Bluetooth controller and Bluedroid stack initialization
+- ✅ GAP and GATTS callbacks registered
+- ✅ FTMS service (UUID 0x1826) with Indoor Rower Data characteristic (UUID 0x2AD1)
+- ✅ BLE advertising with device name "FDF Rower"
+- ✅ GATT notifications with properly formatted Indoor Rower Data packets
+- ✅ Connection management and subscription handling
+- ✅ Complete data flow from USB to Bluetooth FTMS
 
-### What Needs Implementation
+### Implementation Complete
 
-- **Full Bluetooth FTMS Service**: The current implementation is a stub that includes the framework but needs:
-  - Initialize Bluetooth controller and Bluedroid stack
-  - Register GATT server callbacks
-  - Create FTMS service with Indoor Rower Data characteristic
-  - Set up advertising with FTMS service UUID
-  - Send GATT notifications with Indoor Rower Data packets
-  - Handle GATT write events for control points
+The project is now fully functional and ready for hardware testing:
 
-## Implementation Note
+- **USB Communication**: Reads data from FDF console via USB CDC-ACM
+- **Protocol Parsing**: Extracts rowing metrics from serial data stream
+- **Bluetooth FTMS**: Broadcasts Indoor Rower Data via Bluetooth LE
+- **GATT Notifications**: Sends real-time updates to connected clients
+- **Error Handling**: Comprehensive error handling and connection management
 
-The USB Host CDC-ACM implementation is complete and working. The Bluetooth FTMS implementation is currently a stub with a clear framework for completing the full implementation. The stub includes proper data structures, mutex protection, and callback framework ready for integration with ESP-IDF's GATT server APIs.
+## Implementation Details
+
+The implementation includes:
+- USB Host CDC-ACM with automatic device detection and data streaming
+- FDF protocol parser with support for all standard rowing metrics
+- Complete Bluetooth FTMS GATT server with Indoor Rower Data characteristic
+- Proper GATT notification handling with connection and subscription management
+- Indoor Rower Data packet formatting according to FTMS specification
 
 ## Hardware Setup
 
@@ -113,10 +133,13 @@ The USB Host CDC-ACM implementation is complete and working. The Bluetooth FTMS 
 
 ## Usage
 
-1. **Power On**: Connect power to the ESP32-S3
-2. **Connect FDF Console**: Plug in your FDF console via USB OTG cable
-3. **Pair Device**: Look for "FDF Rower" in your fitness app's Bluetooth device list
-4. **Start Rowing**: Begin your rowing session - data will be transmitted in real-time
+1. **Power On**: Connect power to the ESP32-S3 via USB-C port
+2. **Connect FDF Console**: Plug in your FDF console to the ESP32-S3 via USB OTG cable
+3. **Wait for Connection**: ESP32-S3 will automatically detect the FDF console and start receiving data
+4. **Bluetooth Advertising**: Device will advertise as "FDF Rower" and start BLE scanning
+5. **Pair Device**: Open your fitness app (Kinomap, Zwift, etc.) and connect to "FDF Rower"
+6. **Enable Notifications**: The app will automatically enable FTMS notifications
+7. **Start Rowing**: Begin your rowing session - data will be transmitted in real-time via Bluetooth
 
 ## Supported Applications
 
@@ -134,10 +157,12 @@ The USB Host CDC-ACM implementation is complete and working. The Bluetooth FTMS 
 - Check console logs for USB connection errors
 
 ### Bluetooth Connection Issues
-- Ensure device is advertising (check logs)
+- Ensure device is advertising as "FDF Rower" (check logs for "Advertising started")
 - Try restarting the ESP32-S3
 - Clear Bluetooth cache on your device
-- Check that FTMS service is properly initialized
+- Check that FTMS service is properly initialized (look for "FTMS service started" in logs)
+- Verify client connects and enables notifications (check logs for "Client connected" and "Notifications enabled")
+- Ensure you're connecting from an FTMS-compatible app (Kinomap, Zwift, etc.)
 
 ### Data Not Updating
 - Verify FDF console is sending data (check logs)
@@ -148,15 +173,20 @@ The USB Host CDC-ACM implementation is complete and working. The Bluetooth FTMS 
 ## Configuration
 
 ### USB Host Settings
-- Buffer size: 1024 bytes
+- Buffer size: 1024 bytes (RX and TX)
 - CDC-ACM driver enabled
 - USB host library configured for ESP32-S3
+- Automatic device detection and connection
+- Data callback for real-time processing
 
 ### Bluetooth Settings
 - Device name: "FDF Rower"
-- Service: Fitness Machine Service (0x1826)
-- Characteristic: Indoor Rower Data (0x2AD1)
-- Advertising interval: 20-40ms
+- Service: Fitness Machine Service (UUID 0x1826)
+- Characteristic: Indoor Rower Data (UUID 0x2AD1)
+- Advertising type: Connectable Undirected
+- Advertising interval: 32-64ms (0x20-0x40)
+- Channel map: All channels
+- Power optimization: Classic BT memory released
 
 ### Data Parsing
 The FDF protocol parser expects data in the format:
